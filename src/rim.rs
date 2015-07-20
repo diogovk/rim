@@ -28,6 +28,7 @@ use std::thread;
 mod buffer;
 mod caret;
 mod command;
+mod console;
 mod frame;
 mod input;
 mod keymap;
@@ -122,6 +123,7 @@ struct Rim {
   buffers: HashMap<BufferId, buffer::Buffer>,
   next_buf_id: BufferId,
   cmd_thread: command::CmdThread,
+  console: console::Console,
   quit: bool,
 }
 
@@ -135,6 +137,7 @@ impl Rim {
     cmd_thread.set_mode(first_win.normal_mode.clone(), 1).ok().expect(
       "Command thread died.");
     windows.insert(first_win_id.clone(), first_win);
+    let console = console::Console::new();
     Rim {
       frame: frame,
       frame_ctx: frame_ctx,
@@ -144,6 +147,7 @@ impl Rim {
       buffers: HashMap::new(),
       next_buf_id: INVALID_BUFFER_ID + 1,
       cmd_thread: cmd_thread,
+      console: console,
       quit: false,
     }
   }
@@ -363,6 +367,7 @@ impl Rim {
             win.view_mut().scroll_into_view(caret, buffer) }); });
       }
       command::WinCmd::SaveBuffer                     => {
+        // I have access to self.console but how do I acess &mut screen::Screen?
         self.buffers.get(&win.buf_id).map(|buffer|
           buffer.write().ok().expect("Failed to save buffer."));
       }
@@ -637,10 +642,13 @@ fn main() {
 
     // clear/redraw/update/invalidate everything if the screen size changed
     if screen.update_size() {
-      rim.frame.set_size(screen.size());
+      let screen::Size(rows, cols) = screen.size();
+      rim.frame.set_size(screen::Size(rows-1, cols));
       rim.invalidate_frame();
       for (_, win) in rim.windows.iter_mut() { win.needs_redraw = true; }
       screen.clear();
+      rim.console.update_size(rows-1, cols);
+      rim.console.print("This is a console test", &mut screen);
     }
 
     let mut did_draw = rim.frame_needs_redraw;
